@@ -10,16 +10,16 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-@app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
+@app.route("/webhook", methods=["POST"])
 def webhook():
     update = request.get_json()
-    if "message" in update and "text" in update["message"]:
+    if update and "message" in update and "text" in update["message"]:
         chat_id = update["message"]["chat"]["id"]
         user_message = update["message"]["text"]
         
         try:
             response = client.models.generate_content(
-                model='gemini-3.8-flash',
+                model='gemini-2.5-flash',
                 contents=user_message,
             )
             reply_text = response.text
@@ -36,4 +36,4 @@ def home():
     return "🤖 Bot is live and running!"
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
