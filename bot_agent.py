@@ -10,6 +10,13 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
+# Models ki priority list - jo pehla chal jaye!
+MODELS_TO_TRY = [
+    'gemini-3.8-flash',
+    'gemini-1.5-flash',
+    'gemini-2.0-flash-lite'
+]
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     update = flask_request.get_json()
@@ -17,15 +24,22 @@ def webhook():
         chat_id = update["message"]["chat"]["id"]
         user_message = update["message"]["text"]
         
-        try:
-            # Google ke bataye hue naye model ka use
-            response = client.models.generate_content(
-                model='gemini-3.8-flash',
-                contents=user_message,
-            )
-            reply_text = response.text
-        except Exception as e:
-            reply_text = f"Oye error aa gaya bhai: {str(e)}"
+        reply_text = None
+        for model_name in MODELS_TO_TRY:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=user_message,
+                )
+                if response and response.text:
+                    reply_text = response.text
+                    break
+            except Exception as e:
+                print(f"Model {model_name} fail hua, agla try kar rahe hain... Error: {str(e)}")
+                continue
+        
+        if not reply_text:
+            reply_text = "Oye bhai abhi saare models busy hain, aik second baad try karna!"
         
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         requests.post(url, json={"chat_id": chat_id, "text": reply_text})
@@ -34,7 +48,7 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "🤖 Bot is live and running!"
+    return "🤖 Bulletproof Bot is live and running!"
 
 if __name__ == "__main__":
     RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
