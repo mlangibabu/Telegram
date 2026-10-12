@@ -5,7 +5,8 @@ from flask import Flask, request as flask_request
 app = Flask(__name__)
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+# Ab hum Groq ki API key uthayenge
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -14,25 +15,28 @@ def webhook():
         chat_id = update["message"]["chat"]["id"]
         user_message = update["message"]["text"]
         
-        reply_text = "Oye bhai error aa gaya!"
+        reply_text = "Oye error aa gaya bhai!"
         
-        # Google Gemini ki direct REST API endpoint (gemini-1.5-flash sab se stable hai)
-        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-        headers = {"Content-Type": "application/json"}
+        # Groq ki lightning-fast API endpoint (Llama 3.3 70B model)
+        groq_url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
         payload = {
-            "contents": [{
-                "parts": [{"text": user_message}]
-            }]
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                {"role": "user", "content": user_message}
+            ]
         }
         
         try:
-            res = requests.post(gemini_url, json=payload, headers=headers)
+            res = requests.post(groq_url, json=payload, headers=headers)
             res_data = res.json()
-            
-                # Response se text nikalna
-            reply_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
+            # Groq ka OpenAI-compatible response format
+            reply_text = res_data["choices"][0]["message"]["content"]
         except Exception as e:
-            reply_text = f"Oye API error aa gaya: {str(e)} | Raw: {res.text}"
+            reply_text = f"Oye Groq error aa gaya: {str(e)}"
         
         # Telegram par message wapas bhejna
         telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -42,7 +46,7 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "🤖 Direct API Bot is live and running!"
+    return "🤖 Groq Telegram Bot is live and running!"
 
 if __name__ == "__main__":
     RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
