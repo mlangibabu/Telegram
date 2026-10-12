@@ -14,32 +14,36 @@ def webhook():
         chat_id = update["message"]["chat"]["id"]
         user_message = update["message"]["text"]
         
-        reply_text = "Oye error aa gaya bhai!"
-        
-        groq_url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        # Yahan model change karke llama-3.1-8b-instant kar diya hai jo sab ke liye available hai
-        payload = {
-            "model": "llama-3.1-8b-instant",
-            "messages": [
-                {"role": "user", "content": user_message}
-            ]
-        }
+        # Pehle dekhte hain konsa model chal sakta hai, ya direct list mangwate hain
+        models_url = "https://api.groq.com/openai/v1/models"
+        headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
         
         try:
-            res = requests.post(groq_url, json=payload, headers=headers)
+            res_models = requests.get(models_url, headers=headers)
+            print("AVAILABLE MODELS:", res_models.text)
+            
+            # Agar koi bhi model list mein mila, toh pehla wala utha lo
+            models_data = res_models.json()
+            available_model = "llama3-8b-8192" # Default fallback
+            if "data" in models_data and len(models_data["data"]) > 0:
+                available_model = models_data["data"][0]["id"]
+                
+            # Ab us model par request bhejte hain
+            groq_url = "https://api.groq.com/openai/v1/chat/completions"
+            payload = {
+                "model": available_model,
+                "messages": [{"role": "user", "content": user_message}]
+            }
+            res = requests.post(groq_url, json=payload, headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"})
             res_data = res.json()
+            
             if "choices" in res_data:
-                reply_text = res_data["choices"][0]["message"]["content"]
+                reply_text = f"[{available_model} se jawab]: " + res_data["choices"][0]["message"]["content"]
             else:
-                reply_text = f"Oye Groq API ne error diya: {res.text}"
+                reply_text = f"Error: {res.text}"
         except Exception as e:
-            reply_text = f"Oye code exception aa gayi: {str(e)}"
+            reply_text = f"Exception: {str(e)}"
         
-        # Telegram par message wapas bhejna
         telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         requests.post(telegram_url, json={"chat_id": chat_id, "text": reply_text})
     
@@ -47,7 +51,7 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "🤖 Groq Instant Bot is live and running!"
+    return "🤖 Groq Model Finder Bot is live!"
 
 if __name__ == "__main__":
     RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
