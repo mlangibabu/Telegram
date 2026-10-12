@@ -9,14 +9,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 app = Flask(__name__)
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-
-# Groq ke current active models ki updated list
-PREFERRED_MODELS = [
-    "llama-3.1-70b-versatile",
-    "llama-3.2-3b-preview",
-    "llama-3.2-1b-preview"
-]
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") # Yahan Gemini ki key lagani hai
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -25,35 +18,29 @@ def webhook():
         chat_id = update["message"]["chat"]["id"]
         user_message = update["message"]["text"]
         
-        reply_text = None
-        groq_url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
+        reply_text = "Oye error aa gaya bhai!"
+        
+        # Gemini ka direct REST API endpoint (gemini-1.5-flash ya gemini-2.5-flash)
+        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "contents": [{
+                "parts": [{"text": user_message}]
+            }]
         }
         
-        for model in PREFERRED_MODELS:
-            payload = {
-                "model": model,
-                "messages": [{"role": "user", "content": user_message}]
-            }
-            try:
-                logging.info(f"Trying Groq model: {model}")
-                res = requests.post(groq_url, json=payload, headers=headers, timeout=10)
-                res_data = res.json()
-                
-                if "choices" in res_data and len(res_data["choices"]) > 0:
-                    reply_text = res_data["choices"][0]["message"]["content"]
-                    logging.info(f"Success with model: {model}")
-                    break
-                else:
-                    logging.warning(f"Failed with model {model}: {res.text}")
-            except Exception as err:
-                logging.error(f"Error querying model {model}: {err}")
-                continue
-        
-        if not reply_text:
-            reply_text = "Oye bhai sabhi Groq models fail ho gaye!"
+        try:
+            logging.info("Sending request to Gemini REST API...")
+            res = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
+            res_data = res.json()
+            
+            if "candidates" in res_data and len(res_data["candidates"]) > 0:
+                reply_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
+            else:
+                reply_text = f"Gemini API Error: {res.text}"
+        except Exception as err:
+            logging.error(f"Error querying Gemini: {err}")
+            reply_text = f"Exception: {str(err)}"
 
         telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         requests.post(telegram_url, json={"chat_id": chat_id, "text": reply_text})
@@ -62,7 +49,7 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "🤖 Groq Bot Active!"
+    return "🤖 Gemini Direct REST Bot Active!"
 
 if __name__ == "__main__":
     RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
