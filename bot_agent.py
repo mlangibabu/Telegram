@@ -1,21 +1,11 @@
 import os
 import requests
 from flask import Flask, request as flask_request
-from google import genai
 
 app = Flask(__name__)
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-client = genai.Client(api_key=GEMINI_API_KEY)
-
-# Models ki priority list - jo pehla chal jaye!
-MODELS_TO_TRY = [
-    'gemini-3.8-flash',
-    'gemini-1.5-flash',
-    'gemini-2.0-flash-lite'
-]
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -24,31 +14,35 @@ def webhook():
         chat_id = update["message"]["chat"]["id"]
         user_message = update["message"]["text"]
         
-        reply_text = None
-        for model_name in MODELS_TO_TRY:
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=user_message,
-                )
-                if response and response.text:
-                    reply_text = response.text
-                    break
-            except Exception as e:
-                print(f"Model {model_name} fail hua, agla try kar rahe hain... Error: {str(e)}")
-                continue
+        reply_text = "Oye bhai error aa gaya!"
         
-        if not reply_text:
-            reply_text = "Oye bhai abhi saare models busy hain, aik second baad try karna!"
+        # Google Gemini ki direct REST API endpoint (gemini-1.5-flash sab se stable hai)
+        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "contents": [{
+                "parts": [{"text": user_message}]
+            }]
+        }
         
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        requests.post(url, json={"chat_id": chat_id, "text": reply_text})
+        try:
+            res = requests.post(gemini_url, json=payload, headers=headers)
+            res_data = res.json()
+            
+                # Response se text nikalna
+            reply_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception as e:
+            reply_text = f"Oye API error aa gaya: {str(e)} | Raw: {res.text}"
+        
+        # Telegram par message wapas bhejna
+        telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        requests.post(telegram_url, json={"chat_id": chat_id, "text": reply_text})
     
     return "OK", 200
 
 @app.route("/")
 def home():
-    return "🤖 Bulletproof Bot is live and running!"
+    return "🤖 Direct API Bot is live and running!"
 
 if __name__ == "__main__":
     RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
