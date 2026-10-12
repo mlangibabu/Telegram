@@ -1,6 +1,6 @@
 import os
-from flask import Flask, request
 import requests
+from flask import Flask, request as flask_request
 from google import genai
 
 app = Flask(__name__)
@@ -12,7 +12,7 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    update = request.get_json()
+    update = flask_request.get_json()
     if update and "message" in update and "text" in update["message"]:
         chat_id = update["message"]["chat"]["id"]
         user_message = update["message"]["text"]
@@ -36,4 +36,15 @@ def home():
     return "🤖 Bot is live and running!"
 
 if __name__ == "__main__":
+    # Auto-set webhook on startup if Render URL is available
+    RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
+    if RENDER_URL and TELEGRAM_BOT_TOKEN:
+        webhook_url = f"{RENDER_URL}/webhook"
+        telegram_api = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook?url={webhook_url}"
+        try:
+            res = requests.get(telegram_api)
+            print("Auto-set webhook response:", res.text)
+        except Exception as ex:
+            print("Failed to auto-set webhook:", ex)
+            
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
