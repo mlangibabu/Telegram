@@ -21,8 +21,9 @@ def webhook():
             "Authorization": f"Bearer {GROQ_API_KEY}",
             "Content-Type": "application/json"
         }
+        # Yahan model change karke llama-3.1-8b-instant kar diya hai jo sab ke liye available hai
         payload = {
-            "model": "llama-3.3-70b-versatile",
+            "model": "llama-3.1-8b-instant",
             "messages": [
                 {"role": "user", "content": user_message}
             ]
@@ -30,10 +31,6 @@ def webhook():
         
         try:
             res = requests.post(groq_url, json=payload, headers=headers)
-            print("--- GROQ RAW RESPONSE ---")
-            print(res.text) # Yeh Render ke logs mein print ho ga!
-            print("-------------------------")
-            
             res_data = res.json()
             if "choices" in res_data:
                 reply_text = res_data["choices"][0]["message"]["content"]
@@ -50,7 +47,7 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "🤖 Groq Debug Bot is live and running!"
+    return "🤖 Groq Instant Bot is live and running!"
 
 if __name__ == "__main__":
     RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
