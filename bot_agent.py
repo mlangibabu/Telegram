@@ -4,7 +4,6 @@ import logging
 import requests
 from flask import Flask, request as flask_request
 
-# Logging to output stdout instantly in Render logs
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 app = Flask(__name__)
@@ -12,12 +11,11 @@ app = Flask(__name__)
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-# Groq Supported Models Fallback List
+# Groq ke current active models ki updated list
 PREFERRED_MODELS = [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
-    "llama3-8b-8192",
-    "gemma2-9b-it"
+    "llama-3.1-70b-versatile",
+    "llama-3.2-3b-preview",
+    "llama-3.2-1b-preview"
 ]
 
 @app.route("/webhook", methods=["POST"])
@@ -55,9 +53,8 @@ def webhook():
                 continue
         
         if not reply_text:
-            reply_text = "Oye bhai sabhi Groq models fail ho gaye! API key or quota recheck karo."
+            reply_text = "Oye bhai sabhi Groq models fail ho gaye!"
 
-        # Send response back to Telegram
         telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         requests.post(telegram_url, json={"chat_id": chat_id, "text": reply_text})
     
@@ -65,7 +62,7 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "🤖 Groq Telegram Bot Active!"
+    return "🤖 Groq Bot Active!"
 
 if __name__ == "__main__":
     RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
