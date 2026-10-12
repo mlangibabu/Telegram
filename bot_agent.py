@@ -21,9 +21,9 @@ def webhook():
             "Authorization": f"Bearer {GROQ_API_KEY}",
             "Content-Type": "application/json"
         }
-        # Yahan humne llama-3.1-8b-instant set kar diya hai
+        # Screenshot ke mutabiq active text-to-text model
         payload = {
-            "model": "llama-3.1-8b-instant",
+            "model": "gpt-oss-120b",
             "messages": [
                 {"role": "user", "content": user_message}
             ]
@@ -48,7 +48,7 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "🤖 Groq Instant Bot is live and running!"
+    return "🤖 Groq OSS Bot is live and running!"
 
 if __name__ == "__main__":
     RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
