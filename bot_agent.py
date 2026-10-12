@@ -1,5 +1,6 @@
 import os
 import requests
+import traceback
 from flask import Flask, request as flask_request
 
 app = Flask(__name__)
@@ -21,24 +22,28 @@ def webhook():
             "Authorization": f"Bearer {GROQ_API_KEY}",
             "Content-Type": "application/json"
         }
-        # Screenshot ke mutabiq active text-to-text model
         payload = {
-            "model": "gpt-oss-120b",
+            "model": "llama-3.1-8b-instant",
             "messages": [
                 {"role": "user", "content": user_message}
             ]
         }
         
         try:
+            print(f"Sending request to Groq with key starting with: {GROQ_API_KEY[:5]}...")
             res = requests.post(groq_url, json=payload, headers=headers)
-            res_data = res.json()
+            print(f"Groq Status Code: {res.status_code}")
+            print(f"Groq Response Text: {res.text}")
             
+            res_data = res.json()
             if "choices" in res_data:
                 reply_text = res_data["choices"][0]["message"]["content"]
             else:
-                reply_text = f"Oye Groq API error: {res.text}"
+                reply_text = f"Groq Error [{res.status_code}]: {res.text}"
         except Exception as e:
-            reply_text = f"Oye code exception: {str(e)}"
+            err_trace = traceback.format_exc()
+            print("Python Exception:\n", err_trace)
+            reply_text = f"Python Exception: {str(e)}"
         
         # Telegram par message wapas bhejna
         telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -48,7 +53,7 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "🤖 Groq OSS Bot is live and running!"
+    return "🤖 Groq Debugger is live!"
 
 if __name__ == "__main__":
     RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
