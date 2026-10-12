@@ -5,7 +5,6 @@ from flask import Flask, request as flask_request
 app = Flask(__name__)
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-# Ab hum Groq ki API key uthayenge
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 @app.route("/webhook", methods=["POST"])
@@ -17,7 +16,6 @@ def webhook():
         
         reply_text = "Oye error aa gaya bhai!"
         
-        # Groq ki lightning-fast API endpoint (Llama 3.3 70B model)
         groq_url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -32,11 +30,17 @@ def webhook():
         
         try:
             res = requests.post(groq_url, json=payload, headers=headers)
+            print("--- GROQ RAW RESPONSE ---")
+            print(res.text) # Yeh Render ke logs mein print ho ga!
+            print("-------------------------")
+            
             res_data = res.json()
-            # Groq ka OpenAI-compatible response format
-            reply_text = res_data["choices"][0]["message"]["content"]
+            if "choices" in res_data:
+                reply_text = res_data["choices"][0]["message"]["content"]
+            else:
+                reply_text = f"Oye Groq API ne error diya: {res.text}"
         except Exception as e:
-            reply_text = f"Oye Groq error aa gaya: {str(e)}"
+            reply_text = f"Oye code exception aa gayi: {str(e)}"
         
         # Telegram par message wapas bhejna
         telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -46,7 +50,7 @@ def webhook():
 
 @app.route("/")
 def home():
-    return "🤖 Groq Telegram Bot is live and running!"
+    return "🤖 Groq Debug Bot is live and running!"
 
 if __name__ == "__main__":
     RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
