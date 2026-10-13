@@ -1,6 +1,7 @@
 import os
 import sys
 import logging
+import threading
 import requests
 from flask import Flask, request as flask_request
 
@@ -9,57 +10,108 @@ logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 app = Flask(__name__)
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") # Yahan Gemini ki key lagani hai
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+TELEGRAM_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
+
+# Telegram kabhi kabhi same update dobara bhejta hai, usay yaad rakhne ke liye
+seen_updates = set()
+
+
+def ask_gemini(user_text):
+    payload = {
+        "contents": [{"parts": [{"text": user_text}]}],
+        # thinking band: jawab tez aata hai
+        "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}},
+    }
+    try:
+        res = requests.post(
+            GEMINI_URL,
+            params={"key": GEMINI_API_KEY},
+            json=payload,
+            timeout=40,
+        )
+        logging.info("Gemini status=%s body=%s", res.status_code, res.text[:300])
+
+        if res.status_code == 429:
+            return "Bohat zyada requests ho gayi, thori der baad try karo."
+        if res.status_code != 200:
+            return "Abhi jawab nahi de saka, thori der baad try karo."
+
+        data = res.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError):
+        logging.error("Gemini reply format unexpected")
+        return "Jawab samajh nahi aaya, dobara likho."
+    except Exception as err:
+        logging.error("Gemini exception: %s", type(err).__name__)
+        return "Kuch masla aa gaya, dobara try karo."
+
+
+def send_telegram(chat_id, text):
+    # Telegram ki limit 4096 characters hai
+    text = text[:4000]
+    try:
+        r = requests.post(
+            f"{TELEGRAM_URL}/sendMessage",
+            json={"chat_id": chat_id, "text": text},
+            timeout=15,
+        )
+        logging.info("Telegram send status=%s", r.status_code)
+    except Exception as err:
+        logging.error("Telegram send failed: %s", type(err).__name__)
+
+
+def handle_message(chat_id, user_message):
+    reply = ask_gemini(user_message)
+    send_telegram(chat_id, reply)
+
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    update = flask_request.get_json()
+    update = flask_request.get_json(silent=True)
     if update and "message" in update and "text" in update["message"]:
+        update_id = update.get("update_id")
+        if update_id in seen_updates:
+            return "OK", 200
+        seen_updates.add(update_id)
+        if len(seen_updates) > 1000:
+            seen_updates.clear()
+
         chat_id = update["message"]["chat"]["id"]
         user_message = update["message"]["text"]
-        
-        reply_text = "Oye error aa gaya bhai!"
-        
-        # Gemini ka direct REST API endpoint (gemini-1.5-flash ya gemini-2.5-flash)
-        gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-        headers = {"Content-Type": "application/json"}
-        payload = {
-            "contents": [{
-                "parts": [{"text": user_message}]
-            }]
-        }
-        
-        try:
-            logging.info("Sending request to Gemini REST API...")
-            res = requests.post(gemini_url, json=payload, headers=headers, timeout=15)
-            res_data = res.json()
-            
-            if "candidates" in res_data and len(res_data["candidates"]) > 0:
-                reply_text = res_data["candidates"][0]["content"]["parts"][0]["text"]
-            else:
-                reply_text = f"Gemini API Error: {res.text}"
-        except Exception as err:
-            logging.error(f"Error querying Gemini: {err}")
-            reply_text = f"Exception: {str(err)}"
 
-        telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        requests.post(telegram_url, json={"chat_id": chat_id, "text": reply_text})
-    
+        # Jawab background mein banao, Telegram ko foran OK do
+        threading.Thread(
+            target=handle_message, args=(chat_id, user_message), daemon=True
+        ).start()
+
     return "OK", 200
+
 
 @app.route("/")
 def home():
-    return "🤖 Gemini Direct REST Bot Active!"
+    return "🤖 Gemini Bot Active!"
+
+
+def register_webhook():
+    render_url = os.environ.get("RENDER_EXTERNAL_URL")
+    if render_url and TELEGRAM_BOT_TOKEN:
+        try:
+            res = requests.get(
+                f"{TELEGRAM_URL}/setWebhook",
+                params={"url": f"{render_url}/webhook"},
+                timeout=15,
+            )
+            logging.info("Auto-set webhook response: %s", res.text)
+        except Exception as ex:
+            logging.error("Failed to auto-set webhook: %s", type(ex).__name__)
+
+
+# gunicorn se chalne par bhi webhook register ho, isliye yahan (module level) par
+register_webhook()
 
 if __name__ == "__main__":
-    RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL")
-    if RENDER_URL and TELEGRAM_BOT_TOKEN:
-        webhook_url = f"{RENDER_URL}/webhook"
-        telegram_api = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook?url={webhook_url}"
-        try:
-            res = requests.get(telegram_api)
-            logging.info(f"Auto-set webhook response: {res.text}")
-        except Exception as ex:
-            logging.error(f"Failed to auto-set webhook: {ex}")
-            
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
