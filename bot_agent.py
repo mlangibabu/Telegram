@@ -12,7 +12,7 @@ app = Flask(__name__)
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.8-flash"
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 TELEGRAM_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
@@ -23,8 +23,6 @@ seen_updates = set()
 def ask_gemini(user_text):
     payload = {
         "contents": [{"parts": [{"text": user_text}]}],
-        # thinking band: jawab tez aata hai
-        "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}},
     }
     try:
         res = requests.post(
@@ -33,7 +31,7 @@ def ask_gemini(user_text):
             json=payload,
             timeout=40,
         )
-        logging.info("Gemini status=%s body=%s", res.status_code, res.text[:300])
+        logging.info("Gemini status=%s body=%s", res.status_code, res.text[:500])
 
         if res.status_code == 429:
             return "Bohat zyada requests ho gayi, thori der baad try karo."
@@ -41,7 +39,10 @@ def ask_gemini(user_text):
             return "Abhi jawab nahi de saka, thori der baad try karo."
 
         data = res.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"]
+        parts = data["candidates"][0]["content"]["parts"]
+        # Sirf text wale hisse jorna (thinking models mein kabhi kabhi extra parts hotay hain)
+        text = "".join(p.get("text", "") for p in parts if not p.get("thought"))
+        return text.strip() or "Khali jawab aaya, dobara likho."
     except (KeyError, IndexError):
         logging.error("Gemini reply format unexpected")
         return "Jawab samajh nahi aaya, dobara likho."
@@ -110,7 +111,6 @@ def register_webhook():
             logging.error("Failed to auto-set webhook: %s", type(ex).__name__)
 
 
-# gunicorn se chalne par bhi webhook register ho, isliye yahan (module level) par
 register_webhook()
 
 if __name__ == "__main__":
